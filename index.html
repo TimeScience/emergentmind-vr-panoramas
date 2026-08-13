@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>Emergent Mind Panoramas — VR</title>
+  <script src="vendor/aframe-1.7.1.min.js"></script>
+  <script src="panoramas.js"></script>
+  <style>
+    body { margin: 0; background: #0b0d12; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    /* 2D intro overlay (hidden once you enter the scene / VR) */
+    #intro {
+      position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center;
+      background: radial-gradient(circle at 50% 30%, #1a2030, #0b0d12 70%); color: #e8ecf4; text-align: center;
+      padding: 24px;
+    }
+    #intro .card { max-width: 34rem; }
+    #intro h1 { font-size: 1.5rem; margin: 0 0 .5rem; }
+    #intro p { color: #aab3c5; line-height: 1.5; margin: .5rem 0; }
+    #intro kbd {
+      background: #222a3a; border: 1px solid #39445c; border-radius: 4px; padding: 1px 6px;
+      font-family: ui-monospace, monospace; font-size: .85em;
+    }
+    #intro button {
+      margin-top: 1rem; font-size: 1rem; padding: .7rem 1.4rem; border: 0; border-radius: 8px;
+      background: #4f7cff; color: #fff; cursor: pointer;
+    }
+    #intro button:focus-visible { outline: 3px solid #a9c0ff; outline-offset: 2px; }
+    #intro small { color: #6b7488; display: block; margin-top: 1rem; }
+  </style>
+</head>
+<body>
+  <div id="intro">
+    <div class="card">
+      <h1>Emergent Mind Panoramas — in VR</h1>
+      <p>A gaze/point gallery of the public Emergent&nbsp;Mind 360° panoramas, viewable inside your headset.</p>
+      <p><b>On the Quest:</b> tap <b>Start</b>, then press the <b>goggles / “Enter VR”</b> icon at the bottom‑right. Point a controller at a thumbnail and pull the trigger. Use the bar at the bottom of your view to go <b>Prev / Next</b> or back to the <b>Gallery</b>.</p>
+      <p><b>On a computer:</b> click a thumbnail; drag to look around; <kbd>M</kbd> gallery, <kbd>←</kbd>/<kbd>→</kbd> prev/next.</p>
+      <button id="startBtn" type="button">Start</button>
+      <small>Images © their creators, served publicly by emergentmind.com. Personal viewer — nothing is rehosted.</small>
+    </div>
+  </div>
+
+  <a-scene background="color: #0b0d12" vr-mode-ui="enterVRButton: #vrbtn" renderer="colorManagement: true; antialias: true" loading-screen="dotsColor: #4f7cff; backgroundColor: #0b0d12">
+
+    <!-- Current panorama (hidden until one is chosen). Full sphere, matches how the source site maps it. -->
+    <a-sky id="sky" visible="false" material="shader: flat; side: back" radius="500"></a-sky>
+
+    <!-- Subtle floor so the gallery has a ground reference -->
+    <a-circle id="floor" radius="6" rotation="-90 0 0" position="0 0 0"
+              material="color: #10141e; shader: flat; opacity: 0.9"></a-circle>
+
+    <!-- Hover caption shown under the gallery -->
+    <a-text id="caption" value="" align="center" color="#e8ecf4" width="6"
+            position="0 0.55 -3.9" visible="false"></a-text>
+
+    <!-- Gallery of thumbnails (built in JS) -->
+    <a-entity id="menu"></a-entity>
+
+    <!-- Camera rig -->
+    <a-entity id="rig" position="0 0 0">
+      <a-camera position="0 1.6 0" wasd-controls="acceleration: 30">
+        <!-- Desktop / gaze cursor (mouse-click on desktop) -->
+        <a-cursor id="gaze" raycaster="objects: .clickable; far: 40" fuse="false"
+                  material="color: #4f7cff; shader: flat" geometry="primitive: ring; radiusInner: 0.008; radiusOuter: 0.014"></a-cursor>
+
+        <!-- Bottom toolbar, attached to the camera; visible only while viewing a panorama -->
+        <a-entity id="hud" visible="false" position="0 -0.85 -1.6">
+          <a-entity class="clickable hud-btn" data-action="menu" position="-0.62 0 0">
+            <a-plane width="0.56" height="0.22" material="color: #222a3a; shader: flat; opacity: 0.92"></a-plane>
+            <a-text value="Gallery" align="center" color="#e8ecf4" width="2.2" position="0 0 0.001"></a-text>
+          </a-entity>
+          <a-entity class="clickable hud-btn" data-action="prev" position="0.02 0 0">
+            <a-plane width="0.42" height="0.22" material="color: #222a3a; shader: flat; opacity: 0.92"></a-plane>
+            <a-text value="&#9664; Prev" align="center" color="#e8ecf4" width="2.2" position="0 0 0.001"></a-text>
+          </a-entity>
+          <a-entity class="clickable hud-btn" data-action="next" position="0.58 0 0">
+            <a-plane width="0.42" height="0.22" material="color: #222a3a; shader: flat; opacity: 0.92"></a-plane>
+            <a-text value="Next &#9654;" align="center" color="#e8ecf4" width="2.2" position="0 0 0.001"></a-text>
+          </a-entity>
+        </a-entity>
+      </a-camera>
+
+      <!-- VR controllers: laser pointer + trigger = click -->
+      <a-entity id="leftHand" laser-controls="hand: left"
+                raycaster="objects: .clickable; far: 40; lineColor: #4f7cff"
+                cursor="fuse: false; rayOrigin: entity; downEvents: triggerdown; upEvents: triggerup"></a-entity>
+      <a-entity id="rightHand" laser-controls="hand: right"
+                raycaster="objects: .clickable; far: 40; lineColor: #4f7cff"
+                cursor="fuse: false; rayOrigin: entity; downEvents: triggerdown; upEvents: triggerup"></a-entity>
+    </a-entity>
+
+    <!-- Loading indicator while a 4K panorama downloads -->
+    <a-text id="loading" value="Loading…" align="center" color="#e8ecf4" width="8"
+            position="0 1.6 -3" visible="false"></a-text>
+  </a-scene>
+
+  <!-- A-Frame's Enter-VR button target -->
+  <button id="vrbtn" style="display:none"></button>
+
+  <script>
+    (function () {
+      var PANORAMAS = window.PANORAMAS || [];
+
+      function onReady(scene, cb) {
+        if (scene.hasLoaded) { cb(); } else { scene.addEventListener('loaded', cb); }
+      }
+
+      var scene = document.querySelector('a-scene');
+      var menu = document.querySelector('#menu');
+      var sky = document.querySelector('#sky');
+      var floor = document.querySelector('#floor');
+      var caption = document.querySelector('#caption');
+      var hud = document.querySelector('#hud');
+      var loading = document.querySelector('#loading');
+      var intro = document.querySelector('#intro');
+
+      var current = -1;          // index of panorama being viewed, or -1 for gallery
+      var viewing = false;
+
+      // ---- Build the curved gallery grid --------------------------------
+      function buildMenu() {
+        var R = 4.0;             // radius (metres)
+        var rows = 5;
+        var N = PANORAMAS.length;
+        var cols = Math.ceil(N / rows);
+        var itemW = 0.9;
+        var itemH = itemW * 9 / 16; // source thumbs are 16:9
+        var angPitch = 1.0 / R;     // ~1 m of arc between columns
+        var rowH = 0.62;
+        var eyeY = 1.6;
+
+        PANORAMAS.forEach(function (p, i) {
+          var col = i % cols;
+          var row = Math.floor(i / cols);
+          var ang = (col - (cols - 1) / 2) * angPitch;
+          var x = R * Math.sin(ang);
+          var z = -R * Math.cos(ang);
+          var y = eyeY + ((rows - 1) / 2 - row) * rowH;
+          var rotY = -ang * 180 / Math.PI;
+
+          var cell = document.createElement('a-entity');
+          cell.setAttribute('position', x + ' ' + y + ' ' + z);
+          cell.setAttribute('rotation', '0 ' + rotY + ' 0');
+
+          var img = document.createElement('a-image');
+          img.setAttribute('src', p.thumb);
+          img.setAttribute('width', itemW);
+          img.setAttribute('height', itemH);
+          img.setAttribute('material', 'shader: flat; side: double');
+          img.setAttribute('class', 'clickable');
+          img.dataset.idx = i;
+
+          // thin frame behind the thumbnail for a hover highlight
+          var frame = document.createElement('a-plane');
+          frame.setAttribute('width', itemW + 0.06);
+          frame.setAttribute('height', itemH + 0.06);
+          frame.setAttribute('position', '0 0 -0.01');
+          frame.setAttribute('material', 'color: #2a3346; shader: flat');
+          frame.classList.add('frame');
+
+          cell.appendChild(frame);
+          cell.appendChild(img);
+          menu.appendChild(cell);
+        });
+      }
+
+      // ---- Show / hide the gallery vs a single panorama -----------------
+      function showGallery() {
+        viewing = false;
+        current = -1;
+        sky.setAttribute('visible', false);
+        menu.setAttribute('visible', true);
+        floor.setAttribute('visible', true);
+        hud.setAttribute('visible', false);
+        loading.setAttribute('visible', false);
+        scene.setAttribute('background', 'color: #0b0d12');
+      }
+
+      function loadPanorama(i) {
+        if (i < 0) { i = PANORAMAS.length - 1; }
+        if (i >= PANORAMAS.length) { i = 0; }
+        current = i;
+        viewing = true;
+        var p = PANORAMAS[i];
+
+        menu.setAttribute('visible', false);
+        floor.setAttribute('visible', false);
+        caption.setAttribute('visible', false);
+        hud.setAttribute('visible', true);
+        loading.setAttribute('value', 'Loading…\n' + p.title);
+        loading.setAttribute('visible', true);
+
+        sky.setAttribute('visible', true);
+        sky.setAttribute('src', p.full);
+      }
+
+      sky.addEventListener('materialtextureloaded', function () {
+        loading.setAttribute('visible', false);
+      });
+
+      // ---- Interaction (events bubble from thumbnails / HUD buttons) -----
+      function nearestClickable(el) {
+        while (el && el !== scene) {
+          if (el.classList && el.classList.contains('clickable')) { return el; }
+          el = el.parentNode;
+        }
+        return null;
+      }
+
+      scene.addEventListener('click', function (e) {
+        var el = nearestClickable(e.target);
+        if (!el) { return; }
+        var action = el.dataset.action;
+        if (action === 'menu') { showGallery(); return; }
+        if (action === 'prev') { loadPanorama(current - 1); return; }
+        if (action === 'next') { loadPanorama(current + 1); return; }
+        if (el.dataset.idx !== undefined) { loadPanorama(parseInt(el.dataset.idx, 10)); }
+      });
+
+      // Hover highlight + caption while in the gallery
+      scene.addEventListener('mouseenter', function (e) {
+        var el = nearestClickable(e.target);
+        if (!el || el.dataset.idx === undefined || viewing) { return; }
+        el.setAttribute('scale', '1.12 1.12 1.12');
+        var frame = el.parentNode.querySelector('.frame');
+        if (frame) { frame.setAttribute('material', 'color: #4f7cff; shader: flat'); }
+        caption.setAttribute('value', PANORAMAS[el.dataset.idx].title);
+        caption.setAttribute('visible', true);
+      });
+      scene.addEventListener('mouseleave', function (e) {
+        var el = nearestClickable(e.target);
+        if (!el || el.dataset.idx === undefined) { return; }
+        el.setAttribute('scale', '1 1 1');
+        var frame = el.parentNode.querySelector('.frame');
+        if (frame) { frame.setAttribute('material', 'color: #2a3346; shader: flat'); }
+      });
+
+      // Desktop keyboard shortcuts
+      window.addEventListener('keydown', function (e) {
+        if (e.key === 'm' || e.key === 'M') { showGallery(); }
+        else if (e.key === 'ArrowLeft' && viewing) { loadPanorama(current - 1); }
+        else if (e.key === 'ArrowRight' && viewing) { loadPanorama(current + 1); }
+      });
+
+      // ---- Boot ---------------------------------------------------------
+      onReady(scene, function () {
+        if (!PANORAMAS.length) {
+          loading.setAttribute('value', 'No panoramas found.\nRun build.py to refresh the list.');
+          loading.setAttribute('visible', true);
+          return;
+        }
+        buildMenu();
+        // Optional deep-link: #p=<index> opens straight into that panorama.
+        var m = /[#&]p=(\d+)/.exec(location.hash);
+        if (m) { loadPanorama(parseInt(m[1], 10)); }
+      });
+
+      // ?nointro=1 skips the splash (handy to bookmark the tunnel URL).
+      if (/[?&]nointro=1/.test(location.search)) { intro.style.display = 'none'; }
+
+      document.querySelector('#startBtn').addEventListener('click', function () {
+        intro.style.display = 'none';
+      });
+      // If the user jumps straight into VR, drop the overlay too.
+      scene.addEventListener('enter-vr', function () { intro.style.display = 'none'; });
+    })();
+  </script>
+</body>
+</html>

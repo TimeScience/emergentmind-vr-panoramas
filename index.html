@@ -33,9 +33,9 @@
   <div id="intro">
     <div class="card">
       <h1>Emergent Mind Panoramas — in VR</h1>
-      <p>A gaze/point gallery of the public Emergent&nbsp;Mind 360° panoramas, viewable inside your headset.</p>
-      <p><b>On the Quest:</b> tap <b>Start</b>, then press the <b>goggles / “Enter VR”</b> icon at the bottom‑right. Point a controller at a thumbnail and pull the <b>trigger</b> to open it. Controls: <b>X</b> = next, <b>Y</b> = prev, <b>A/B</b> = back to gallery, <b>left grip</b> = exit VR. <b>Hold the right grip</b> anytime to show these controls in-headset.</p>
-      <p><b>On a computer:</b> click a thumbnail; drag to look around; <kbd>M</kbd> gallery, <kbd>←</kbd>/<kbd>→</kbd> prev/next, <kbd>H</kbd> toggle controls.</p>
+      <p>A gaze/point gallery of the public Emergent&nbsp;Mind 360° panoramas, viewable inside your headset. The three big <b>collections</b> (World History, Space, Artistic Styles) appear as folders at the front.</p>
+      <p><b>On the Quest:</b> tap <b>Start</b>, then press the <b>goggles / “Enter VR”</b> icon at the bottom‑right. Point a controller at a folder or panorama and pull the <b>trigger</b>. <b>X/Y</b> = next/prev panorama (or page through a collection), <b>A/B</b> = back, <b>left grip</b> = exit VR. <b>Hold the right grip</b> anytime to show the controls.</p>
+      <p><b>On a computer:</b> click to open; drag to look around; <kbd>M</kbd> back, <kbd>←</kbd>/<kbd>→</kbd> prev/next or page, <kbd>H</kbd> toggle controls.</p>
       <button id="startBtn" type="button">Start</button>
       <small>Images © their creators, served publicly by emergentmind.com. Personal viewer — nothing is rehosted.</small>
     </div>
@@ -54,7 +54,11 @@
     <a-text id="caption" value="" align="center" color="#e8ecf4" width="6"
             position="0 0.55 -3.9" visible="false"></a-text>
 
-    <!-- Gallery of thumbnails (built in JS) -->
+    <!-- Collection title + page indicator, shown above the grid inside a collection -->
+    <a-text id="banner" value="" align="center" color="#ffffff" width="5"
+            position="0 3.6 -4" visible="false"></a-text>
+
+    <!-- Gallery grid (built in JS) -->
     <a-entity id="menu"></a-entity>
 
     <!-- Camera rig -->
@@ -69,7 +73,7 @@
         <a-entity id="legend" visible="false" position="0 -0.92 -1.6">
           <a-plane width="1.9" height="0.16" material="color: #0b0d12; shader: flat; opacity: 0.5"></a-plane>
           <a-text id="legendText" value="" align="center" baseline="center" color="#cdd6e6"
-                  width="1.85" wrap-count="52" position="0 0 0.002"></a-text>
+                  width="1.85" wrap-count="60" position="0 0 0.002"></a-text>
         </a-entity>
       </a-camera>
 
@@ -89,105 +93,223 @@
 
   <script>
     (function () {
-      var PANORAMAS = window.PANORAMAS || [];
+      var G = window.GALLERY || { loose: [], collections: [] };
+      var LOOSE = G.loose || [];
+      var COLLECTIONS = G.collections || [];
+      var PAGE_SIZE = 48;
 
+      function qs(s) { return document.querySelector(s); }
       function onReady(scene, cb) {
         if (scene.hasLoaded) { cb(); } else { scene.addEventListener('loaded', cb); }
       }
 
-      var scene = document.querySelector('a-scene');
-      var menu = document.querySelector('#menu');
-      var sky = document.querySelector('#sky');
-      var floor = document.querySelector('#floor');
-      var caption = document.querySelector('#caption');
-      var legend = document.querySelector('#legend');
-      var legendText = document.querySelector('#legendText');
-      var loading = document.querySelector('#loading');
-      var intro = document.querySelector('#intro');
-      var leftHand = document.querySelector('#leftHand');
-      var rightHand = document.querySelector('#rightHand');
+      var scene = qs('a-scene');
+      var menu = qs('#menu');
+      var sky = qs('#sky');
+      var floor = qs('#floor');
+      var caption = qs('#caption');
+      var banner = qs('#banner');
+      var legend = qs('#legend');
+      var legendText = qs('#legendText');
+      var loading = qs('#loading');
+      var intro = qs('#intro');
+      var leftHand = qs('#leftHand');
+      var rightHand = qs('#rightHand');
 
-      var GALLERY_HINT = 'Point + pull trigger to open     Left grip: exit VR';
-      var VIEW_HINT = 'X: Next     Y: Prev     A / B: Gallery     Left grip: Exit VR';
+      var TOP_HINT = 'Point + trigger to open      Left grip: exit VR';
+      var COLL_HINT = 'X / Y: page    A / B: back    trigger: open    Left grip: exit';
+      var COLL_HINT_1 = 'A / B: back      trigger: open      Left grip: exit VR';
+      var VIEW_HINT = 'X: Next     Y: Prev     A / B: Back     Left grip: Exit VR';
 
-      var current = -1;          // index of panorama being viewed, or -1 for gallery
-      var viewing = false;
+      // view: 'top' | 'collection' | 'viewing'
+      var view = 'top';
+      var activeList = LOOSE;    // panoramas navigable with X/Y while viewing
+      var activeCollection = -1; // index into COLLECTIONS, or -1 for the loose set
+      var page = 0;              // page within a collection
+      var current = -1;          // index into activeList while viewing
 
-      // ---- Build the curved gallery grid --------------------------------
-      function buildMenu() {
-        var R = 4.0;             // radius (metres)
-        var rows = 5;
-        var N = PANORAMAS.length;
+      var itemW = 0.9, itemH = itemW * 9 / 16; // source thumbs are 16:9
+
+      // ---- Grid layout (curved) -----------------------------------------
+      function tileLayout(i, N) {
+        var R = 4.0, rows = 5, eyeY = 1.6, rowH = 0.62, angPitch = 1.0 / R;
         var cols = Math.ceil(N / rows);
-        var itemW = 0.9;
-        var itemH = itemW * 9 / 16; // source thumbs are 16:9
-        var angPitch = 1.0 / R;     // ~1 m of arc between columns
-        var rowH = 0.62;
-        var eyeY = 1.6;
+        var col = i % cols, row = Math.floor(i / cols);
+        var ang = (col - (cols - 1) / 2) * angPitch;
+        return {
+          x: R * Math.sin(ang), z: -R * Math.cos(ang),
+          y: eyeY + ((rows - 1) / 2 - row) * rowH,
+          rotY: -ang * 180 / Math.PI
+        };
+      }
 
-        PANORAMAS.forEach(function (p, i) {
-          var col = i % cols;
-          var row = Math.floor(i / cols);
-          var ang = (col - (cols - 1) / 2) * angPitch;
-          var x = R * Math.sin(ang);
-          var z = -R * Math.cos(ang);
-          var y = eyeY + ((rows - 1) / 2 - row) * rowH;
-          var rotY = -ang * 180 / Math.PI;
+      function clearGrid() {
+        var imgs = menu.querySelectorAll('a-image');
+        for (var k = 0; k < imgs.length; k++) {
+          var m = imgs[k].getObject3D('mesh');
+          if (m && m.material && m.material.map) { m.material.map.dispose(); }
+        }
+        while (menu.firstChild) { menu.removeChild(menu.firstChild); }
+      }
 
-          var cell = document.createElement('a-entity');
-          cell.setAttribute('position', x + ' ' + y + ' ' + z);
-          cell.setAttribute('rotation', '0 ' + rotY + ' 0');
-
-          var img = document.createElement('a-image');
-          img.setAttribute('src', p.thumb);
-          img.setAttribute('width', itemW);
-          img.setAttribute('height', itemH);
-          img.setAttribute('material', 'shader: flat; side: double');
-          img.setAttribute('class', 'clickable');
-          img.dataset.idx = i;
-
-          // thin frame behind the thumbnail for a hover highlight
-          var frame = document.createElement('a-plane');
-          frame.setAttribute('width', itemW + 0.06);
-          frame.setAttribute('height', itemH + 0.06);
-          frame.setAttribute('position', '0 0 -0.01');
-          frame.setAttribute('material', 'color: #2a3346; shader: flat');
-          frame.classList.add('frame');
-
-          cell.appendChild(frame);
-          cell.appendChild(img);
-          menu.appendChild(cell);
+      function refreshRaycasters() {
+        ['#leftHand', '#rightHand', '#gaze'].forEach(function (sel) {
+          var el = qs(sel);
+          if (el && el.components && el.components.raycaster) { el.components.raycaster.refreshObjects(); }
         });
       }
 
-      // ---- Show / hide the gallery vs a single panorama -----------------
-      function showGallery() {
-        viewing = false;
-        current = -1;
-        sky.setAttribute('visible', false);
-        menu.setAttribute('visible', true);
-        floor.setAttribute('visible', true);
-        loading.setAttribute('visible', false);
-        legendText.setAttribute('value', GALLERY_HINT);
-        scene.setAttribute('background', 'color: #0b0d12');
+      // tiles: [{kind:'back'} | {kind:'thumb', thumb, label, frame, data:{name,val}}]
+      function renderTiles(tiles) {
+        clearGrid();
+        var N = tiles.length;
+        tiles.forEach(function (t, i) {
+          var pos = tileLayout(i, N);
+          var cell = document.createElement('a-entity');
+          cell.setAttribute('position', pos.x + ' ' + pos.y + ' ' + pos.z);
+          cell.setAttribute('rotation', '0 ' + pos.rotY + ' 0');
+
+          if (t.kind === 'back') {
+            var pl = document.createElement('a-plane');
+            pl.setAttribute('width', itemW); pl.setAttribute('height', itemH);
+            pl.setAttribute('material', 'color: #1c2436; shader: flat');
+            pl.setAttribute('class', 'clickable');
+            pl.dataset.action = 'back';
+            var bt = document.createElement('a-text');
+            bt.setAttribute('value', '◀ Back'); bt.setAttribute('align', 'center');
+            bt.setAttribute('color', '#cdd6e6'); bt.setAttribute('width', 2.2);
+            bt.setAttribute('position', '0 0 0.01');
+            cell.appendChild(pl); cell.appendChild(bt);
+          } else {
+            var frame = document.createElement('a-plane');
+            frame.setAttribute('width', itemW + 0.06); frame.setAttribute('height', itemH + 0.06);
+            frame.setAttribute('position', '0 0 -0.01');
+            frame.setAttribute('material', 'color: ' + (t.frame || '#2a3346') + '; shader: flat');
+            frame.classList.add('frame');
+            var img = document.createElement('a-image');
+            img.setAttribute('src', t.thumb);
+            img.setAttribute('width', itemW); img.setAttribute('height', itemH);
+            img.setAttribute('material', 'shader: flat; side: double');
+            img.setAttribute('class', 'clickable');
+            img.dataset[t.data.name] = t.data.val;
+            cell.appendChild(frame); cell.appendChild(img);
+            if (t.label) {
+              var lt = document.createElement('a-text');
+              lt.setAttribute('value', t.label); lt.setAttribute('align', 'center');
+              lt.setAttribute('color', '#e8ecf4'); lt.setAttribute('width', 1.7);
+              lt.setAttribute('wrap-count', 24);
+              lt.setAttribute('position', '0 ' + (-(itemH / 2) - 0.07) + ' 0.02');
+              cell.appendChild(lt);
+            }
+          }
+          menu.appendChild(cell);
+        });
+        refreshRaycasters();
       }
 
-      function loadPanorama(i) {
-        if (i < 0) { i = PANORAMAS.length - 1; }
-        if (i >= PANORAMAS.length) { i = 0; }
-        current = i;
-        viewing = true;
-        var p = PANORAMAS[i];
+      // ---- Views --------------------------------------------------------
+      function showTop() {
+        view = 'top'; activeCollection = -1; activeList = LOOSE; current = -1;
+        sky.setAttribute('visible', false);
+        floor.setAttribute('visible', true);
+        banner.setAttribute('visible', false);
+        caption.setAttribute('visible', false);
+        loading.setAttribute('visible', false);
+        scene.setAttribute('background', 'color: #0b0d12');
+
+        // Lay out loose panoramas, but reserve the centre of the top row for the
+        // collection folders so they sit front-and-centre.
+        var N = LOOSE.length + COLLECTIONS.length;
+        var cols = Math.ceil(N / 5);
+        var cstart = Math.max(0, Math.floor((cols - COLLECTIONS.length) / 2));
+        var reserved = {};
+        COLLECTIONS.forEach(function (c, ci) { reserved[cstart + ci] = ci; });
+
+        var tiles = [];
+        var li = 0;
+        for (var idx = 0; idx < N; idx++) {
+          if (reserved[idx] !== undefined) {
+            var c = COLLECTIONS[reserved[idx]];
+            tiles.push({ kind: 'thumb', thumb: c.cover.thumb, label: c.title + '  (' + c.items.length + ')',
+                         frame: '#3a4a6a', data: { name: 'collection', val: reserved[idx] } });
+          } else if (li < LOOSE.length) {
+            tiles.push({ kind: 'thumb', thumb: LOOSE[li].thumb, data: { name: 'pano', val: li } });
+            li++;
+          }
+        }
+        renderTiles(tiles);
+        menu.setAttribute('visible', true);
+        legendText.setAttribute('value', TOP_HINT);
+      }
+
+      function enterCollection(ci) {
+        activeCollection = ci; activeList = COLLECTIONS[ci].items; view = 'collection';
+        current = -1; page = 0;
+        renderCollectionPage();
+      }
+
+      function collectionPages() {
+        return Math.max(1, Math.ceil(COLLECTIONS[activeCollection].items.length / PAGE_SIZE));
+      }
+
+      function renderCollectionPage() {
+        var c = COLLECTIONS[activeCollection];
+        var pages = collectionPages();
+        if (page < 0) { page = 0; }
+        if (page > pages - 1) { page = pages - 1; }
+        var start = page * PAGE_SIZE;
+        var slice = c.items.slice(start, start + PAGE_SIZE);
+
+        var tiles = [{ kind: 'back' }];
+        slice.forEach(function (p, k) {
+          tiles.push({ kind: 'thumb', thumb: p.thumb, data: { name: 'pano', val: start + k } });
+        });
+        renderTiles(tiles);
+
+        sky.setAttribute('visible', false);
+        floor.setAttribute('visible', true);
+        menu.setAttribute('visible', true);
+        caption.setAttribute('visible', false);
+        banner.setAttribute('value', c.title + '     page ' + (page + 1) + ' / ' + pages);
+        banner.setAttribute('visible', true);
+        scene.setAttribute('background', 'color: #0b0d12');
+        legendText.setAttribute('value', pages > 1 ? COLL_HINT : COLL_HINT_1);
+      }
+
+      function pageBy(d) {
+        if (view !== 'collection') { return; }
+        var pages = collectionPages();
+        var np = page + d;
+        if (np < 0 || np > pages - 1) { return; } // clamp, no wrap
+        page = np;
+        renderCollectionPage();
+      }
+
+      function openPano(i) {
+        if (!activeList.length) { return; }
+        if (i < 0) { i = activeList.length - 1; }
+        if (i >= activeList.length) { i = 0; }
+        current = i; view = 'viewing';
+        var p = activeList[i];
 
         menu.setAttribute('visible', false);
         floor.setAttribute('visible', false);
         caption.setAttribute('visible', false);
+        banner.setAttribute('visible', false);
         legendText.setAttribute('value', VIEW_HINT);
         loading.setAttribute('value', 'Loading…\n' + p.title);
         loading.setAttribute('visible', true);
-
         sky.setAttribute('visible', true);
         sky.setAttribute('src', p.full);
+      }
+
+      function goBack() {
+        if (view === 'viewing') {
+          if (activeCollection >= 0) { view = 'collection'; renderCollectionPage(); }
+          else { showTop(); }
+        } else if (view === 'collection') {
+          showTop();
+        }
       }
 
       sky.addEventListener('materialtextureloaded', function () {
@@ -203,38 +325,48 @@
         return null;
       }
 
-      // Point + trigger opens a thumbnail (laser raycast, gallery only).
       scene.addEventListener('click', function (e) {
         var el = nearestClickable(e.target);
-        if (el && el.dataset.idx !== undefined) { loadPanorama(parseInt(el.dataset.idx, 10)); }
+        if (!el) { return; }
+        if (el.dataset.action === 'back') { goBack(); return; }
+        if (el.dataset.collection !== undefined) { enterCollection(parseInt(el.dataset.collection, 10)); return; }
+        if (el.dataset.pano !== undefined) { openPano(parseInt(el.dataset.pano, 10)); }
       });
 
       // ---- Quest controller buttons (reliable — no raycast needed) ------
-      // Left face buttons: X = next, Y = prev (while viewing a panorama).
-      leftHand.addEventListener('xbuttondown', function () { if (viewing) { loadPanorama(current + 1); } });
-      leftHand.addEventListener('ybuttondown', function () { if (viewing) { loadPanorama(current - 1); } });
-      // Right face buttons: A or B = back to the gallery.
-      rightHand.addEventListener('abuttondown', function () { showGallery(); });
-      rightHand.addEventListener('bbuttondown', function () { showGallery(); });
-      // Left grip = exit immersive VR.
+      leftHand.addEventListener('xbuttondown', function () {
+        if (view === 'viewing') { openPano(current + 1); } else if (view === 'collection') { pageBy(1); }
+      });
+      leftHand.addEventListener('ybuttondown', function () {
+        if (view === 'viewing') { openPano(current - 1); } else if (view === 'collection') { pageBy(-1); }
+      });
+      rightHand.addEventListener('abuttondown', goBack);
+      rightHand.addEventListener('bbuttondown', goBack);
       leftHand.addEventListener('gripdown', function () { if (scene.is('vr-mode')) { scene.exitVR(); } });
-      // Right grip = hold to peek at the controls (hidden otherwise).
       rightHand.addEventListener('gripdown', function () { legend.setAttribute('visible', true); });
       rightHand.addEventListener('gripup', function () { legend.setAttribute('visible', false); });
 
-      // Hover highlight + caption while in the gallery
+      // Hover highlight + caption (gallery grids only)
       scene.addEventListener('mouseenter', function (e) {
         var el = nearestClickable(e.target);
-        if (!el || el.dataset.idx === undefined || viewing) { return; }
-        el.setAttribute('scale', '1.12 1.12 1.12');
+        if (!el || view === 'viewing') { return; }
+        el.setAttribute('scale', '1.1 1.1 1.1');
         var frame = el.parentNode.querySelector('.frame');
         if (frame) { frame.setAttribute('material', 'color: #4f7cff; shader: flat'); }
-        caption.setAttribute('value', PANORAMAS[el.dataset.idx].title);
+        var text = '';
+        if (el.dataset.action === 'back') { text = 'Back'; }
+        else if (el.dataset.collection !== undefined) {
+          var c = COLLECTIONS[parseInt(el.dataset.collection, 10)];
+          text = c.title + ' — ' + c.items.length + ' panoramas';
+        } else if (el.dataset.pano !== undefined) {
+          text = activeList[parseInt(el.dataset.pano, 10)].title;
+        }
+        caption.setAttribute('value', text);
         caption.setAttribute('visible', true);
       });
       scene.addEventListener('mouseleave', function (e) {
         var el = nearestClickable(e.target);
-        if (!el || el.dataset.idx === undefined) { return; }
+        if (!el) { return; }
         el.setAttribute('scale', '1 1 1');
         var frame = el.parentNode.querySelector('.frame');
         if (frame) { frame.setAttribute('material', 'color: #2a3346; shader: flat'); }
@@ -242,35 +374,37 @@
 
       // Desktop keyboard shortcuts
       window.addEventListener('keydown', function (e) {
-        if (e.key === 'm' || e.key === 'M') { showGallery(); }
-        else if (e.key === 'ArrowLeft' && viewing) { loadPanorama(current - 1); }
-        else if (e.key === 'ArrowRight' && viewing) { loadPanorama(current + 1); }
-        else if (e.key === 'h' || e.key === 'H' || e.key === '?') {
-          legend.setAttribute('visible', !legend.getAttribute('visible'));
-        }
+        var k = e.key;
+        if (k === 'm' || k === 'M') { goBack(); }
+        else if (k === 'ArrowRight') { if (view === 'viewing') { openPano(current + 1); } else if (view === 'collection') { pageBy(1); } }
+        else if (k === 'ArrowLeft') { if (view === 'viewing') { openPano(current - 1); } else if (view === 'collection') { pageBy(-1); } }
+        else if (k === 'h' || k === 'H' || k === '?') { legend.setAttribute('visible', !legend.getAttribute('visible')); }
       });
 
       // ---- Boot ---------------------------------------------------------
       onReady(scene, function () {
-        if (!PANORAMAS.length) {
+        if (!LOOSE.length && !COLLECTIONS.length) {
           loading.setAttribute('value', 'No panoramas found.\nRun build.py to refresh the list.');
           loading.setAttribute('visible', true);
           return;
         }
-        buildMenu();
-        legendText.setAttribute('value', GALLERY_HINT);
-        // Optional deep-link: #p=<index> opens straight into that panorama.
-        var m = /[#&]p=(\d+)/.exec(location.hash);
-        if (m) { loadPanorama(parseInt(m[1], 10)); }
+        showTop();
+        // Deep-links: #c=<slug> enters a collection, optional &p=<n> opens item n;
+        // #p=<n> alone opens loose panorama n.
+        var hp = new URLSearchParams(location.hash.replace(/^#/, ''));
+        if (hp.has('c')) {
+          var ci = -1;
+          for (var j = 0; j < COLLECTIONS.length; j++) { if (COLLECTIONS[j].slug === hp.get('c')) { ci = j; break; } }
+          if (ci >= 0) { enterCollection(ci); if (hp.has('p')) { openPano(parseInt(hp.get('p'), 10)); } }
+        } else if (hp.has('p')) {
+          openPano(parseInt(hp.get('p'), 10));
+        }
       });
 
-      // ?nointro=1 skips the splash (handy to bookmark the tunnel URL).
+      // ?nointro=1 skips the splash (handy to bookmark the URL).
       if (/[?&]nointro=1/.test(location.search)) { intro.style.display = 'none'; }
 
-      document.querySelector('#startBtn').addEventListener('click', function () {
-        intro.style.display = 'none';
-      });
-      // If the user jumps straight into VR, drop the overlay too.
+      qs('#startBtn').addEventListener('click', function () { intro.style.display = 'none'; });
       scene.addEventListener('enter-vr', function () { intro.style.display = 'none'; });
     })();
   </script>

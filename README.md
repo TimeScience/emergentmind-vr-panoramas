@@ -15,8 +15,8 @@ gallery list once, at build time, into `panoramas.js`.
 | File | Purpose |
 |------|---------|
 | `index.html` | The A-Frame WebXR app (gallery + immersive viewer). |
-| `panoramas.js` | Generated list of `{full, thumb, title}` — do not edit by hand. |
-| `build.py` | Scrapes the gallery into `panoramas.js`. Re-run to refresh. |
+| `panoramas.js` | Generated `window.GALLERY = { loose, collections }` — do not edit by hand. |
+| `build.py` | Scrapes the gallery + collections into `panoramas.js`. Re-run to refresh. |
 | `vendor/aframe-1.7.1.min.js` | A-Frame, vendored locally (no runtime CDN). |
 | `run.sh` | Serves the folder and opens a Cloudflare tunnel over HTTPS. |
 
@@ -41,21 +41,27 @@ panorama #3 (e.g. `https://….trycloudflare.com/?nointro=1#p=3`).
 
 ## Controls
 
-**In VR:** point a controller at a thumbnail and pull the **trigger** to open
-it. Then: **X** = next, **Y** = prev, **A/B** = back to gallery, **left grip**
-= exit VR. The controls are hidden to keep the view clean — **hold the right
-grip** to peek at them.
+The top level shows the three **collections** (World History, Space, Artistic
+Styles) as folders, front-and-centre, plus the ~60 loose panoramas. Open a
+collection to page through its panoramas (~48 per page).
 
-**On a computer** (for testing): click a thumbnail, drag to look around.
-<kbd>M</kbd> = back to gallery, <kbd>←</kbd> / <kbd>→</kbd> = prev / next,
-<kbd>H</kbd> = toggle the controls legend.
+**In VR:** point a controller at a folder or thumbnail and pull the **trigger**.
+**X / Y** = next/prev panorama, or page through a collection. **A / B** = back
+(out of a panorama, then out of a collection). **Left grip** = exit VR. The
+controls are hidden to keep the view clean — **hold the right grip** to peek.
+
+**On a computer** (for testing): click to open, drag to look around.
+<kbd>M</kbd> = back, <kbd>←</kbd> / <kbd>→</kbd> = prev/next or page,
+<kbd>H</kbd> = toggle the controls legend. Deep-links: `#c=<slug>` opens a
+collection, `#p=<n>` opens loose panorama _n_.
 
 ## Refreshing the list
 
-The public gallery shows ~63 curated panoramas. To pick up new ones later:
+The public gallery shows ~60 loose panoramas plus 3 collections (~554 more).
+The list is **static** — baked in at build time, not fetched live. To refresh:
 
 ```bash
-python3 build.py
+python3 build.py    # then commit + push; Pages redeploys
 ```
 
 ## Permanent hosting (optional)

@@ -41,11 +41,14 @@ panorama #3 (e.g. `https://….trycloudflare.com/?nointro=1#p=3`).
 
 ## Controls
 
-**In VR:** point a controller at a thumbnail and pull the trigger. While
-viewing, use the **Gallery / Prev / Next** bar at the bottom of your view.
+**In VR:** point a controller at a thumbnail and pull the **trigger** to open
+it. Then: **X** = next, **Y** = prev, **A/B** = back to gallery, **left grip**
+= exit VR. The controls are hidden to keep the view clean — **hold the right
+grip** to peek at them.
 
 **On a computer** (for testing): click a thumbnail, drag to look around.
-<kbd>M</kbd> = back to gallery, <kbd>←</kbd> / <kbd>→</kbd> = prev / next.
+<kbd>M</kbd> = back to gallery, <kbd>←</kbd> / <kbd>→</kbd> = prev / next,
+<kbd>H</kbd> = toggle the controls legend.
 
 ## Refreshing the list
 

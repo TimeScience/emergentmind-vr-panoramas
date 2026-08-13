@@ -34,8 +34,8 @@
     <div class="card">
       <h1>Emergent Mind Panoramas — in VR</h1>
       <p>A gaze/point gallery of the public Emergent&nbsp;Mind 360° panoramas, viewable inside your headset.</p>
-      <p><b>On the Quest:</b> tap <b>Start</b>, then press the <b>goggles / “Enter VR”</b> icon at the bottom‑right. Point a controller at a thumbnail and pull the <b>trigger</b> to open it. Then use the controller buttons: <b>X</b> = next, <b>Y</b> = prev, <b>A/B</b> = back to gallery, <b>left grip</b> = exit VR.</p>
-      <p><b>On a computer:</b> click a thumbnail; drag to look around; <kbd>M</kbd> gallery, <kbd>←</kbd>/<kbd>→</kbd> prev/next.</p>
+      <p><b>On the Quest:</b> tap <b>Start</b>, then press the <b>goggles / “Enter VR”</b> icon at the bottom‑right. Point a controller at a thumbnail and pull the <b>trigger</b> to open it. Controls: <b>X</b> = next, <b>Y</b> = prev, <b>A/B</b> = back to gallery, <b>left grip</b> = exit VR. <b>Hold the right grip</b> anytime to show these controls in-headset.</p>
+      <p><b>On a computer:</b> click a thumbnail; drag to look around; <kbd>M</kbd> gallery, <kbd>←</kbd>/<kbd>→</kbd> prev/next, <kbd>H</kbd> toggle controls.</p>
       <button id="startBtn" type="button">Start</button>
       <small>Images © their creators, served publicly by emergentmind.com. Personal viewer — nothing is rehosted.</small>
     </div>
@@ -64,8 +64,9 @@
         <a-cursor id="gaze" raycaster="objects: .clickable; far: 40" fuse="false"
                   material="color: #4f7cff; shader: flat" geometry="primitive: ring; radiusInner: 0.008; radiusOuter: 0.014"></a-cursor>
 
-        <!-- Non-interactive control legend, attached to the camera. -->
-        <a-entity id="legend" position="0 -0.92 -1.6">
+        <!-- Non-interactive control legend, attached to the camera. Hidden until
+             the right grip is held (hold-to-peek), so the view stays clean. -->
+        <a-entity id="legend" visible="false" position="0 -0.92 -1.6">
           <a-plane width="1.9" height="0.16" material="color: #0b0d12; shader: flat; opacity: 0.5"></a-plane>
           <a-text id="legendText" value="" align="center" baseline="center" color="#cdd6e6"
                   width="1.85" wrap-count="52" position="0 0 0.002"></a-text>
@@ -99,6 +100,7 @@
       var sky = document.querySelector('#sky');
       var floor = document.querySelector('#floor');
       var caption = document.querySelector('#caption');
+      var legend = document.querySelector('#legend');
       var legendText = document.querySelector('#legendText');
       var loading = document.querySelector('#loading');
       var intro = document.querySelector('#intro');
@@ -216,6 +218,9 @@
       rightHand.addEventListener('bbuttondown', function () { showGallery(); });
       // Left grip = exit immersive VR.
       leftHand.addEventListener('gripdown', function () { if (scene.is('vr-mode')) { scene.exitVR(); } });
+      // Right grip = hold to peek at the controls (hidden otherwise).
+      rightHand.addEventListener('gripdown', function () { legend.setAttribute('visible', true); });
+      rightHand.addEventListener('gripup', function () { legend.setAttribute('visible', false); });
 
       // Hover highlight + caption while in the gallery
       scene.addEventListener('mouseenter', function (e) {
@@ -240,6 +245,9 @@
         if (e.key === 'm' || e.key === 'M') { showGallery(); }
         else if (e.key === 'ArrowLeft' && viewing) { loadPanorama(current - 1); }
         else if (e.key === 'ArrowRight' && viewing) { loadPanorama(current + 1); }
+        else if (e.key === 'h' || e.key === 'H' || e.key === '?') {
+          legend.setAttribute('visible', !legend.getAttribute('visible'));
+        }
       });
 
       // ---- Boot ---------------------------------------------------------

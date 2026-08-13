@@ -41,7 +41,7 @@
     </div>
   </div>
 
-  <a-scene background="color: #0b0d12" vr-mode-ui="enterVRButton: #vrbtn" renderer="colorManagement: true; antialias: true" loading-screen="dotsColor: #4f7cff; backgroundColor: #0b0d12">
+  <a-scene background="color: #0b0d12" vr-mode-ui="enabled: true" renderer="colorManagement: true; antialias: true" loading-screen="dotsColor: #4f7cff; backgroundColor: #0b0d12">
 
     <!-- Current panorama (hidden until one is chosen). Full sphere, matches how the source site maps it. -->
     <a-sky id="sky" visible="false" material="shader: flat; side: back" radius="500"></a-sky>
@@ -94,9 +94,6 @@
     <a-text id="loading" value="Loading…" align="center" color="#e8ecf4" width="8"
             position="0 1.6 -3" visible="false"></a-text>
   </a-scene>
-
-  <!-- A-Frame's Enter-VR button target -->
-  <button id="vrbtn" style="display:none"></button>
 
   <script>
     (function () {

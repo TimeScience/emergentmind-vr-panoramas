@@ -50,24 +50,27 @@
     <a-circle id="floor" radius="6" rotation="-90 0 0" position="0 0 0"
               material="color: #10141e; shader: flat; opacity: 0.9"></a-circle>
 
-    <!-- Hover caption shown under the gallery -->
-    <a-text id="caption" value="" align="center" color="#e8ecf4" width="6"
-            position="0 0.55 -3.9" visible="false"></a-text>
+    <!-- All gallery UI lives under one root that gets re-oriented to face the
+         user (see faceUser), so the gallery always reappears in front of you. -->
+    <a-entity id="galleryRoot">
+      <!-- Hover caption, sat well in front of the curved grid so it isn't occluded -->
+      <a-text id="caption" value="" align="center" color="#e8ecf4" width="2.6"
+              position="0 1.0 -2.4" visible="false"></a-text>
 
-    <!-- Collection title + page indicator, shown above the grid inside a collection -->
-    <a-text id="banner" value="" align="center" color="#ffffff" width="5"
-            position="0 3.6 -4" visible="false"></a-text>
+      <!-- Collection title + page indicator, above the grid -->
+      <a-text id="banner" value="" align="center" color="#ffffff" width="5"
+              position="0 3.6 -4" visible="false"></a-text>
 
-    <!-- Gallery grid (built in JS) -->
-    <a-entity id="menu"></a-entity>
+      <!-- Gallery grid (built in JS) -->
+      <a-entity id="menu"></a-entity>
+    </a-entity>
+
+    <!-- Desktop mouse cursor: follows the pointer, no center reticle (no VR dot) -->
+    <a-entity id="mouseCursor" cursor="rayOrigin: mouse" raycaster="objects: .clickable; far: 100"></a-entity>
 
     <!-- Camera rig -->
     <a-entity id="rig" position="0 0 0">
       <a-camera position="0 1.6 0" wasd-controls="acceleration: 30">
-        <!-- Desktop / gaze cursor (mouse-click on desktop) -->
-        <a-cursor id="gaze" raycaster="objects: .clickable; far: 40" fuse="false"
-                  material="color: #4f7cff; shader: flat" geometry="primitive: ring; radiusInner: 0.008; radiusOuter: 0.014"></a-cursor>
-
         <!-- Non-interactive control legend, attached to the camera. Hidden until
              the right grip is held (hold-to-peek), so the view stays clean. -->
         <a-entity id="legend" visible="false" position="0 -0.92 -1.6">
@@ -77,13 +80,26 @@
         </a-entity>
       </a-camera>
 
-      <!-- VR controllers: laser pointer + trigger = click -->
+      <!-- VR controllers: laser pointer + trigger = click, with a button tooltip
+           floating just above each controller. -->
       <a-entity id="leftHand" laser-controls="hand: left"
                 raycaster="objects: .clickable; far: 40; lineColor: #4f7cff"
-                cursor="fuse: false; rayOrigin: entity; downEvents: triggerdown; upEvents: triggerup"></a-entity>
+                cursor="fuse: false; rayOrigin: entity; downEvents: triggerdown; upEvents: triggerup">
+        <a-entity id="leftTip" position="0 0.11 0.06" rotation="-45 0 0">
+          <a-plane width="0.26" height="0.15" material="color: #0b0d12; opacity: 0.62; shader: flat"></a-plane>
+          <a-text id="leftTipText" value="" align="center" baseline="center" color="#cdd6e6"
+                  width="0.5" wrap-count="16" position="0 0 0.002"></a-text>
+        </a-entity>
+      </a-entity>
       <a-entity id="rightHand" laser-controls="hand: right"
                 raycaster="objects: .clickable; far: 40; lineColor: #4f7cff"
-                cursor="fuse: false; rayOrigin: entity; downEvents: triggerdown; upEvents: triggerup"></a-entity>
+                cursor="fuse: false; rayOrigin: entity; downEvents: triggerdown; upEvents: triggerup">
+        <a-entity id="rightTip" position="0 0.11 0.06" rotation="-45 0 0">
+          <a-plane width="0.26" height="0.15" material="color: #0b0d12; opacity: 0.62; shader: flat"></a-plane>
+          <a-text id="rightTipText" value="" align="center" baseline="center" color="#cdd6e6"
+                  width="0.5" wrap-count="16" position="0 0 0.002"></a-text>
+        </a-entity>
+      </a-entity>
     </a-entity>
 
     <!-- Loading indicator while a 4K panorama downloads -->
@@ -104,6 +120,7 @@
       }
 
       var scene = qs('a-scene');
+      var galleryRoot = qs('#galleryRoot');
       var menu = qs('#menu');
       var sky = qs('#sky');
       var floor = qs('#floor');
@@ -115,6 +132,8 @@
       var intro = qs('#intro');
       var leftHand = qs('#leftHand');
       var rightHand = qs('#rightHand');
+      var leftTipText = qs('#leftTipText');
+      var rightTipText = qs('#rightTipText');
 
       var TOP_HINT = 'Point + trigger to open      Left grip: exit VR';
       var COLL_HINT = 'X / Y: page    A / B: back    trigger: open    Left grip: exit';
@@ -153,10 +172,33 @@
       }
 
       function refreshRaycasters() {
-        ['#leftHand', '#rightHand', '#gaze'].forEach(function (sel) {
+        ['#leftHand', '#rightHand', '#mouseCursor'].forEach(function (sel) {
           var el = qs(sel);
           if (el && el.components && el.components.raycaster) { el.components.raycaster.refreshObjects(); }
         });
+      }
+
+      // Re-orient the whole gallery to face the direction the user is currently
+      // looking, so it always reappears in front of them (e.g. after turning
+      // around inside a panorama and coming back).
+      function faceUser() {
+        var cam = scene.camera;
+        if (!cam) { return; }
+        var q = cam.getWorldQuaternion(new AFRAME.THREE.Quaternion());
+        var e = new AFRAME.THREE.Euler().setFromQuaternion(q, 'YXZ');
+        galleryRoot.setAttribute('rotation', '0 ' + AFRAME.THREE.MathUtils.radToDeg(e.y) + ' 0');
+      }
+
+      // Button labels floating on the controllers, updated per mode.
+      function updateTips() {
+        if (view === 'viewing') {
+          leftTipText.setAttribute('value', 'X  Next\nY  Prev\nGrip  Exit VR');
+        } else if (view === 'collection') {
+          leftTipText.setAttribute('value', 'X  Next page\nY  Prev page\nGrip  Exit VR');
+        } else {
+          leftTipText.setAttribute('value', 'Grip  Exit VR');
+        }
+        rightTipText.setAttribute('value', 'Trigger  Open\nA / B  Back\nGrip  Info');
       }
 
       // tiles: [{kind:'back'} | {kind:'thumb', thumb, label, frame, data:{name,val}}]
@@ -240,12 +282,15 @@
         renderTiles(tiles);
         menu.setAttribute('visible', true);
         legendText.setAttribute('value', TOP_HINT);
+        updateTips();
+        faceUser();
       }
 
       function enterCollection(ci) {
         activeCollection = ci; activeList = COLLECTIONS[ci].items; view = 'collection';
         current = -1; page = 0;
         renderCollectionPage();
+        faceUser();
       }
 
       function collectionPages() {
@@ -274,6 +319,7 @@
         banner.setAttribute('visible', true);
         scene.setAttribute('background', 'color: #0b0d12');
         legendText.setAttribute('value', pages > 1 ? COLL_HINT : COLL_HINT_1);
+        updateTips();
       }
 
       function pageBy(d) {
@@ -297,6 +343,7 @@
         caption.setAttribute('visible', false);
         banner.setAttribute('visible', false);
         legendText.setAttribute('value', VIEW_HINT);
+        updateTips();
         loading.setAttribute('value', 'Loading…\n' + p.title);
         loading.setAttribute('visible', true);
         sky.setAttribute('visible', true);
@@ -305,7 +352,7 @@
 
       function goBack() {
         if (view === 'viewing') {
-          if (activeCollection >= 0) { view = 'collection'; renderCollectionPage(); }
+          if (activeCollection >= 0) { view = 'collection'; renderCollectionPage(); faceUser(); }
           else { showTop(); }
         } else if (view === 'collection') {
           showTop();
@@ -405,7 +452,11 @@
       if (/[?&]nointro=1/.test(location.search)) { intro.style.display = 'none'; }
 
       qs('#startBtn').addEventListener('click', function () { intro.style.display = 'none'; });
-      scene.addEventListener('enter-vr', function () { intro.style.display = 'none'; });
+      scene.addEventListener('enter-vr', function () {
+        intro.style.display = 'none';
+        // Let the headset pose settle, then face the gallery toward the user.
+        if (view !== 'viewing') { setTimeout(function () { if (view !== 'viewing') { faceUser(); } }, 200); }
+      });
     })();
   </script>
 </body>

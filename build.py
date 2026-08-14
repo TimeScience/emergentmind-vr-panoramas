@@ -18,9 +18,13 @@ import sys
 import urllib.request
 
 INDEX_URL = "https://www.emergentmind.com/panoramas/"
-COLLECTION_URL = "https://www.emergentmind.com/panoramas/{slug}"
+PANO_URL = "https://www.emergentmind.com/panoramas/{slug}"
 UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
 OUT = "panoramas.js"
+
+# Individual panorama ids to always pin to the front of the loose set, even if
+# they're not on the current front page.
+PINNED = ["4243675f"]  # "Psychedelic Bubble Sphere"
 
 # Each gallery item is an <a href="/panoramas/..."> wrapping a thumbnail <img>.
 # Individual panoramas have an opaque hex id; collections have a word slug.
@@ -29,6 +33,10 @@ IMG_TAG = re.compile(r"<img\b[^>]*panorama_\d+_thumb_[a-f0-9]+\.webp[^>]*>", re.
 SRC = re.compile(r'src="([^"]+)"')
 ALT = re.compile(r'alt="([^"]*)"')
 HEX_ID = re.compile(r"[a-f0-9]{6,}$")
+# On an individual panorama page: the full-res image and the title.
+PANO_IMG = re.compile(r'data-panorama-image-value="([^"]+)"')
+OG_TITLE = re.compile(r'og:title" content="([^"]*)"')
+FULL_TO_THUMB = re.compile(r"(panorama_\d+)_([a-f0-9]+\.webp)")
 
 
 def fetch(url: str) -> str:
@@ -53,6 +61,19 @@ def pano_from_anchor(block: str):
     alt = ALT.search(tag.group(0))
     title = html.unescape(alt.group(1)).strip() if alt else ""
     return {"full": thumb.replace("_thumb", ""), "thumb": thumb, "title": title}
+
+
+def fetch_pinned(pid: str):
+    """Fetch an individual panorama page → {full, thumb, title}, or None."""
+    page = fetch(PANO_URL.format(slug=pid))
+    m = PANO_IMG.search(page)
+    if not m:
+        return None
+    full = m.group(1)
+    thumb = FULL_TO_THUMB.sub(r"\1_thumb_\2", full)
+    t = OG_TITLE.search(page)
+    title = html.unescape(t.group(1)).strip() if t else "Untitled"
+    return {"full": full, "thumb": thumb, "title": title or "Untitled"}
 
 
 def parse_panoramas(page: str, hex_only: bool):
@@ -93,8 +114,18 @@ def main() -> int:
             seen_cov.add(slug)
             collections.append({"slug": slug, "cover": {"full": p["full"], "thumb": p["thumb"]}})
 
+    # Pin explicit panoramas to the front of the loose set (deduped).
+    for pid in reversed(PINNED):
+        p = fetch_pinned(pid)
+        if p and p["full"] not in seen_loose:
+            seen_loose.add(p["full"])
+            loose.insert(0, p)
+            print(f"  pinned {pid}: {p['title']}")
+        elif not p:
+            print(f"  WARNING: could not fetch pinned {pid}", file=sys.stderr)
+
     for c in collections:
-        items = parse_panoramas(fetch(COLLECTION_URL.format(slug=c["slug"])), hex_only=True)
+        items = parse_panoramas(fetch(PANO_URL.format(slug=c["slug"])), hex_only=True)
         c["title"] = titleize_slug(c["slug"])
         c["items"] = items
         print(f"  collection {c['slug']}: {len(items)} panoramas")

@@ -47,8 +47,9 @@ collection to page through its panoramas (~48 per page).
 
 **In VR:** point a controller at a folder or thumbnail and pull the **trigger**.
 **X / Y** = next/prev panorama, or page through a collection. **A / B** = back
-(out of a panorama, then out of a collection). **Left grip** = exit VR. The
-controls are hidden to keep the view clean — **hold the right grip** to peek.
+(out of a panorama, then out of a collection). **Left grip** = exit VR. Each
+controller shows a small **button tooltip**; the gallery re-orients to face you
+when you return to it, and **hold the right grip** for a full controls legend.
 
 **On a computer** (for testing): click to open, drag to look around.
 <kbd>M</kbd> = back, <kbd>←</kbd> / <kbd>→</kbd> = prev/next or page,
@@ -63,6 +64,10 @@ The list is **static** — baked in at build time, not fetched live. To refresh:
 ```bash
 python3 build.py    # then commit + push; Pages redeploys
 ```
+
+To always include a specific panorama (even if it's not on the front page), add
+its id to the `PINNED` list near the top of `build.py` — it's pinned to the
+front of the loose set.
 
 ## Permanent hosting (optional)
 

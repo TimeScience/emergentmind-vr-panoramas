@@ -1,2 +1,6 @@
 .DS_Store
 WORKLOG.md
+.session-archive/
+live.html
+index-test.html
+*.output
